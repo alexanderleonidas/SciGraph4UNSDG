@@ -304,7 +304,7 @@ def build_provenance(openalex_id: str, query_url: str, timestamp: str, classific
             "target_id":    entry.get("target_id"),        # scitax:assignedTarget
             "indicator_id": entry.get("indicator_id"),     # scitax:assignedIndicator
             "series_id":    entry.get("series_id"),        # scitax:assignedSeries
-            "score":        entry.get("score"),            # scitax:sdgRelevanceScore
+            "score":        entry.get("score"),            # scitax:relevanceScore
             # prov:wasGeneratedBy → activity
             "generated_by": activity_id,
             # prov:used → all evidence concepts (conservative linking)

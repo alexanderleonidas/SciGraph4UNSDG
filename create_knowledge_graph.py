@@ -103,10 +103,11 @@ def add_unsdg_triples():
             add_triple(UNSDG[i], SDGO.hasSeries, UNSDG[code])
 
 
-def add_work(work: dict):
+def add_work(work: dict, top_n_goals: int = 1):
     """
     Add a work object to the SciGraph4UNSDG graph and all its related triples (institutions, topics, SDG connections, etc.)
     :param work: a JSON object representing a work
+    :param top_n_goals: the number of top-scoring Goals to link to the work (default: 1)
     """
     # Add the work as a bibo:Document
     work_id = URIRef(work["id"])
@@ -188,52 +189,54 @@ def add_work(work: dict):
     for funder in work["funders"]:
         funder_id = URIRef(funder["id"])
         add_triple(funder_id, RDF.type, SCHEMA.FundingAgency)
-        add_triple(funder_id, SCHEMA.name, Literal(funder["name"], lang="en"))
+        add_triple(funder_id, SCHEMA.name, Literal(funder["name"], datatype=XSD.string))
         add_triple(funder_id, SCHEMA.funder, work_id)
         add_triple(work_id, FOAF.fundedBy, funder_id)
 
     # ---------- Add the SDG connections to the work ----------
-    # 1. Compute total score per goal
+    # Strategy: scores only exist at the series level. To decide which Goals
+    # (and their children) to link to a work, we sum all series scores per
+    # Goal URI and take the top_n_goals highest-scoring Goals.
+    # Filter *whole rows* from flat_series_scores.
+    # This preserves every goal→target→indicator→series relationship exactly
+
+    # Step 1: sum series scores per goal URI
     goal_totals = {}
-    for series in work["flat_series_scores"]:
-        goal_uri = series["goal_id"]
-        goal_totals[goal_uri] = goal_totals.get(goal_uri, 0) + series["score"]
+    for row in work["flat_series_scores"]:
+        g = row["goal_id"]
+        goal_totals[g] = goal_totals.get(g, 0) + row["score"]
+    # Step 2: rank goals by total score descending, keep the top N
+    top_goals = set(sorted(goal_totals, key=lambda g: goal_totals[g], reverse=True)[:top_n_goals])
 
-    # 2. Determine the maximum total (if any series exist)
-    if goal_totals:
-        max_total = max(goal_totals.values())
-    else:
-        max_total = 0  # no series → nothing to add
-
-    # 3. Iterate over series and add triples only for those whose goal achieves the max total
-    for series in work["flat_series_scores"]:
-        if goal_totals[series["goal_id"]] == max_total:
-            g_id = series["goal_id"].split('/')[-1]
-            t_id = series["target_id"].split('/')[-1]
-            i_id = series["indicator_id"].split('/')[-1]
-            s_id = series["series_id"].split('/')[-1]
-
-            # Series level
-            add_triple(work_id,  SCITAX.addressesSeries, UNSDG[s_id])
-            add_triple(UNSDG[s_id],  SCITAX.seriesAddressedBy, work_id)
-
-            # Indicator level
-            add_triple(work_id,  SCITAX.addressesIndicator, UNSDG[i_id])
-            add_triple(UNSDG[i_id],  SCITAX.indicatorAddressedBy, work_id)
-
-            # Target level
-            add_triple(work_id,  SCITAX.addressesTarget, UNSDG[t_id])
-            add_triple(UNSDG[t_id],  SCITAX.targetAddressedBy, work_id)
-
-            # Goal level
-            add_triple(work_id,  SCITAX.addressesGoal, UNSDG[g_id])
-            add_triple(UNSDG[g_id],  SCITAX.goalAddressedBy, work_id)
+    # Step 3: add triples for every series row that belongs to a top Goal.
+    # Each row is one complete goal→target→indicator→series path, so adding
+    # all four levels per row is always consistent.
+    for row in work["flat_series_scores"]:
+        if row["goal_id"] not in top_goals:
+            continue
+        g_id = row["goal_id"].split('/')[-1]
+        t_id = row["target_id"].split('/')[-1]
+        i_id = row["indicator_id"].split('/')[-1]
+        s_id = row["series_id"].split('/')[-1]
+        # Series level
+        add_triple(work_id, SCITAX.addressesSeries, UNSDG[s_id])
+        add_triple(UNSDG[s_id], SCITAX.seriesAddressedBy, work_id)
+        # Indicator level
+        add_triple(work_id, SCITAX.addressesIndicator, UNSDG[i_id])
+        add_triple(UNSDG[i_id], SCITAX.indicatorAddressedBy, work_id)
+        # Target level
+        add_triple(work_id, SCITAX.addressesTarget, UNSDG[t_id])
+        add_triple(UNSDG[t_id], SCITAX.targetAddressedBy, work_id)
+        # Goal level
+        add_triple(work_id, SCITAX.addressesGoal, UNSDG[g_id])
+        add_triple(UNSDG[g_id], SCITAX.goalAddressedBy, work_id)
 
 
-def add_openalex_triples(max_works: int = None):
+def add_openalex_triples(max_works: int = None, top_n_goals: int = 1):
     """
     Procedure to add OpenAlex triples to the KG
     :param max_works: if set, only add this many works to the KG
+    :param top_n_goals: the number of top-scoring Goals to link to the work (default: 1)
     """
     # Load the classified OpenAlex data
     print("Loading OpenAlex data...")
@@ -242,7 +245,7 @@ def add_openalex_triples(max_works: int = None):
     print("Adding Extended works to the KG...")
     works_parsed = 0
     for work in expanded_works:
-        add_work(work)
+        add_work(work, top_n_goals=top_n_goals)
         works_parsed += 1
         if max_works and works_parsed >= max_works:
             break
@@ -250,7 +253,7 @@ def add_openalex_triples(max_works: int = None):
     works_parsed = 0
     print("Adding SDG works to the KG...")
     for work in sdg_works:
-        add_work(work)
+        add_work(work, top_n_goals=top_n_goals)
         works_parsed += 1
         if max_works and works_parsed >= max_works:
             break
@@ -408,20 +411,21 @@ def serialise_kg():
     SciGraph4UNSDG.serialize("data/SciGraph4UNSDG.ttl", format="turtle")
 
 
-def create_kg(max_works: int = None):
+def create_kg(max_works: int = None, top_n_goals: int = 1):
     """
     Main procedure to create the SciGraph4UNSDG knowledge graph. This procedure will load the UNSDG data, the OpenAlex data,
     and the provenance data, add all the relevant triples to the graph, and serialise it to a Turtle file.
     :param max_works: Optional parameter to limit the number of works added to the graph (for testing purposes). If None, all works will be added.
+    :param top_n_goals: Optional parameter to limit the number of top-scoring Goals to link to the work (default: 1).
     :return:
     """
     SciGraph4UNSDG.parse("data/SciGraph4UNSDG_ontology.ttl")  # Load the ontology
     add_unsdg_triples()
-    add_openalex_triples(max_works=max_works)
+    add_openalex_triples(max_works=max_works, top_n_goals=top_n_goals)
     add_provenance_triples(max_works=max_works)
     serialise_kg()
     print("Number of Tiples in the graph: ", len(SciGraph4UNSDG))
 
 
 # if __name__ == "__main__":
-#     create_kg()
+#     create_kg(top_n_goals=2)

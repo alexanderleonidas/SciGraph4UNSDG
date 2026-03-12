@@ -18,4 +18,4 @@ if __name__ == '__main__':
 
     # Create the graph from the classified data
     create_ontology()
-    create_kg()
+    create_kg(top_n_goals=1)
