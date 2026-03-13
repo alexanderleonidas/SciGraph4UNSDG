@@ -47,15 +47,14 @@ SciGraph4UNSDG/
 ├── linkedsdg_classifier.py         # Classifies OpenAlex works against SDG targets with scoring
 ├── unsdg_collector.py              # Downloads and parses UN SDG goals, targets, and series metadata
 ├── openalex_collector.py           # Fetches research works and metadata from the OpenAlex API
-└── sparql_queries.ipynb            # SPARQL queries for knowledge graph analysis and reporting
+└── sparql_queries.ipynb            # Example SPARQL queries for knowledge graph analysis and reporting
 ```
 
 # Ontology & Vocabularies
-The project defines a custom `scitax:` vocabulary for classification assignments and extends standard ontologies:
+The project defines a custom `scitax:` namespace for the schema structure and a `sci:` namespace for instances of classification assignments. It extends standard ontologies:
 
 | Prefix    | Purpose                                                  |
 |-----------|----------------------------------------------------------|
-| `scitax:` | Classification assignments, scores, and concept evidence | 
 | `prov:`   | Provenance of classification activities (PROV-O)         |
 | `skos:`   | SDG labels and controlled vocabulary alignment           |
 | `bibo:`   | Bibliographic document typing                            |
