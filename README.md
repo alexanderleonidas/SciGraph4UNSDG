@@ -39,7 +39,7 @@ Use `sparql_queries.ipynb` to run analytical SPARQL queries over the constructed
 # Project Structure
 ```
 SciGraph4UNSDG/
-├── data/                           # Data files and output TTL graph
+├── data/                           # Data files and output TTL graph (this will be created when you run `main.py`)
 ├── main.py                         # Main script to run the full pipeline
 ├── helper_funcs.py                 # Shared utility functions
 ├── create_knowledge_graph.py       # Populates the RDF knowledge graph with OpenAlex and UN SDG data
